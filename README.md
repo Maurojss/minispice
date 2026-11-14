@@ -6,7 +6,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-183%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-numpy%20%2B%20matplotlib-orange)
 
 </div>
@@ -77,6 +77,9 @@ SPICE semantics and is validated against analytic results.
   `.meas ... MIN=... MAX=...` declares a specification and
   `simulation.yield_summary` reports the pass fraction per measurement
   (also broken down per step case in `yield_by_case`).
+- **Sensitivity and worst case:** `.sens V(out)` ranks DC operating-point
+  sensitivities by relative impact and sweeps the `±TOL` corners of the most
+  influential components (`--sensitivity` / `--worst-case` on the CLI).
 - **Parameters, initial conditions and measurements:** `.param` with `{...}`
   arithmetic, user `.func` definitions, `if(condition, a, b)` and
   `gauss(mean, sigma)`, `.temp`, `.ic`/`IC=`, `.tran ... uic`, and `.meas`
@@ -97,7 +100,7 @@ SPICE semantics and is validated against analytic results.
   `oai21`, `aoi22`, `oai22` and `mux21` as sky130-inspired subcircuits, with the
   real sky130 PDK BSIM4 files vendored for reference (see
   [below](#compound-gates-with-the-sky130-pdk)).
-- **Tests:** 183 passing — engine, parser, DC, transient, AC, devices, CLI, GUI,
+- **Tests:** 188 passing — engine, parser, DC, transient, AC, devices, CLI, GUI,
   leakage, parameters/measurements, dependent and behavioral sources, noise,
   distortion, stepping, Monte Carlo, BJT and the compound cells (including 66
   truth-table rows). CI runs the whole suite on every push and enforces 75%
@@ -150,6 +153,7 @@ minispice examples/step_sweep.cir                         # .step param
 minispice examples/monte_carlo.cir                        # .mc + summary
 minispice examples/monte_carlo_yield.cir                  # .meas limits + yield
 minispice examples/expressions_mc.cir                     # .func/if + Gaussian .mc
+minispice examples/sensitivity.cir                        # .sens + worst case
 minispice examples/noise_rc.cir                           # .noise
 minispice examples/fourier_thd.cir                        # .four + THD
 minispice examples/behavioral.cir                         # B sources
@@ -295,6 +299,45 @@ Monte Carlo yield:
 
 `simulation.yield_summary` and `simulation.yield_by_case` expose the same data
 in Python; measurements without limits still get a histogram (no yield).
+
+### Sensitivity and worst case
+
+`.sens` linearizes the DC operating point around the nominal solution and does
+not need to modify the netlist. It ranks components by the normalized
+sensitivity `(dY/dP)·P/Y` and then evaluates the `±TOL` corners of the most
+influential ones:
+
+```spice
+V1 in 0 1
+R1 in out 1k TOL=0.1
+R2 out 0 1k TOL=0.1
+.sens V(out) TOP=8 DEVICES=6
+.op
+.end
+```
+
+```text
+Sensitivity: V(out)
+  nominal = 0.5
+  device             value         dY/dP    normalized
+  R1                  1000      -0.00025          -0.5
+  R2                  1000       0.00025           0.5
+  worst case: min 0.45 (R1=1100, R2=900) / max 0.55 (R1=900, R2=1100)
+```
+
+`TOP=` limits the ranking table, `DEVICES=` limits how many components enter
+the corner sweep (capped at 10, i.e. 1024 solves) and `TOL=` is the default for
+devices without their own `TOL=`. The same report is available in Python as
+`simulation.sensitivity_report` and from the CLI:
+
+```bash
+minispice network.cir --sensitivity V(out)
+minispice network.cir --worst-case V(out)   # alias, report includes corners
+```
+
+`.sens` is a DC operating-point analysis: capacitors/inductors are skipped and
+`RHO`-style correlations are not modelled. Use Monte Carlo for transient, AC or
+statistical spreads.
 
 ### Noise
 
@@ -704,6 +747,7 @@ minispice/
 - [x] Gummel-Poon high-injection knee and non-ideal base currents
 - [x] BJT charge storage and parasitic resistances
 - [x] Gaussian/correlated Monte Carlo and yield specifications
+- [x] Sensitivity ranking and worst-case corners (`.sens`)
 - [ ] JFET, transmission lines and a comparison suite against ngspice
 
 ## Contributing

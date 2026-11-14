@@ -568,6 +568,16 @@ class FourierSpec:
 
 
 @dataclass
+class SensitivitySpec:
+    """DC operating-point sensitivity and worst-case analysis (``.sens``)."""
+
+    output: str
+    top: int = 8
+    devices: int = 6
+    tol: float = 0.05
+
+
+@dataclass
 class MeasureSpec:
     """A small, useful subset of SPICE ``.meas`` statements."""
 
@@ -618,6 +628,7 @@ class Circuit:
     initial_conditions: dict[str, float] = field(default_factory=dict)
     measures: list[MeasureSpec] = field(default_factory=list)
     fourier: list[FourierSpec] = field(default_factory=list)
+    sensitivity: list[SensitivitySpec] = field(default_factory=list)
     functions: dict[str, tuple[list[str], str]] = field(default_factory=dict)
     mc_runs: int = 0
     mc_seed: int | None = None
@@ -1222,6 +1233,32 @@ class NetlistParser:
                 raise NetlistError(".four needs a frequency and a signal")
             self.circuit.fourier.append(
                 FourierSpec(self._value(tokens[0]), tokens[1:])
+            )
+        elif low.startswith(".sens"):
+            tokens = _split_words(line)[1:]
+            if not tokens:
+                raise NetlistError(".sens needs an output signal (e.g. V(out))")
+            output = tokens[0]
+            top = 8
+            devices = 6
+            tol = 0.05
+            for token in tokens[1:]:
+                if "=" not in token:
+                    raise NetlistError(f"invalid .sens argument: {token!r}")
+                key, _, text = token.partition("=")
+                key = key.lower()
+                if key == "top":
+                    top = max(int(self._value(text)), 1)
+                elif key == "devices":
+                    devices = max(int(self._value(text)), 1)
+                elif key == "tol":
+                    tol = self._value(text)
+                    if tol <= 0.0:
+                        raise NetlistError(".sens TOL must be positive")
+                else:
+                    raise NetlistError(f"unsupported .sens keyword: {key}")
+            self.circuit.sensitivity.append(
+                SensitivitySpec(output, top=top, devices=devices, tol=tol)
             )
         elif low.startswith(".ic"):
             self._parse_initial_conditions(line)

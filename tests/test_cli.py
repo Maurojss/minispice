@@ -99,3 +99,20 @@ def test_cli_reports_monte_carlo_yield(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "Monte Carlo yield:" in output
     assert "vout" in output and "100.0%" in output
+
+
+def test_cli_sensitivity_flag(tmp_path, capsys):
+    netlist = tmp_path / "sens.cir"
+    netlist.write_text(
+        "Divider\n"
+        "V1 in 0 1\n"
+        "R1 in out 1k TOL=0.1\n"
+        "R2 out 0 1k TOL=0.1\n"
+        ".op\n.end\n"
+    )
+    assert main([str(netlist), "--sensitivity", "V(out)"]) == 0
+    output = capsys.readouterr().out
+    assert "Sensitivity: V(out)" in output
+    assert "R1" in output and "R2" in output
+    assert "worst case:" in output
+    assert "0.45" in output and "0.55" in output

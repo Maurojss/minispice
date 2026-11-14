@@ -1,0 +1,7 @@
+* Sensitivity and worst-case analysis of a resistive divider
+V1 in 0 1
+R1 in out 1k TOL=0.1
+R2 out 0 1k TOL=0.1
+.sens V(out) TOP=5 DEVICES=2
+.op
+.end

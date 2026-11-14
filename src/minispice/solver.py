@@ -113,6 +113,7 @@ class Simulation:
         self.yield_summary: dict[str, dict[str, float | None]] = {}
         self.yield_by_case: dict[str, dict[str, dict[str, float | None]]] = {}
         self.case_groups: list[dict] = []
+        self.sensitivity_report: list[dict] = []
 
     # ------------------------------------------------------------- parasitics
     @staticmethod
@@ -804,44 +805,275 @@ class Simulation:
     def _solve_dc(self, ctx: _Context, x0: np.ndarray | None) -> tuple[np.ndarray, int]:
         try:
             return self._newton(ctx, x0)
-        except ConvergenceError:
-            pass
+        except ConvergenceError as exc:
+            direct_error = str(exc)
 
+        # 1) gmin stepping at the full source level.
         x = x0
         gmin = 1e-2
-        stepped = True
+        gmin_ok = True
         while gmin > self.opt.gmin * 10.0:
             try:
                 x, _ = self._newton(replace(ctx, gmin=gmin), x)
             except ConvergenceError:
-                stepped = False
+                gmin_ok = False
                 break
             gmin /= 10.0
-        if stepped:
+        if gmin_ok:
             try:
                 return self._newton(replace(ctx, gmin=self.opt.gmin), x)
             except ConvergenceError:
                 pass
 
-        x = x0
-        last_iterations = 0
-        for alpha in np.linspace(0.05, 1.0, 20):
-            try:
-                x, last_iterations = self._newton(
-                    replace(ctx, source_scale=alpha, gmin=self.opt.gmin), x
+        # 2) source stepping at the requested gmin.
+        try:
+            return self._source_stepping(ctx, x)
+        except ConvergenceError:
+            pass
+
+        # 3) combined strategy: solve with a soft gmin, ramp the sources and
+        #    then tighten gmin back to the requested value.
+        soft_gmin = max(self.opt.gmin, 1e-6)
+        try:
+            x, iterations = self._source_stepping(
+                replace(ctx, gmin=soft_gmin), x
+            )
+            while soft_gmin > self.opt.gmin * 10.0:
+                soft_gmin = max(soft_gmin / 10.0, self.opt.gmin)
+                x, iterations = self._newton(
+                    replace(ctx, gmin=soft_gmin), x
                 )
-            except ConvergenceError as exc:
-                raise ConvergenceError(
-                    f"source stepping failed at alpha={alpha:.2f}"
-                ) from exc
+            return x, iterations
+        except ConvergenceError as exc:
+            diagnostics = self._residual_diagnostics(x, ctx)
+            raise ConvergenceError(
+                f"{direct_error}; source/gmin stepping failed; {diagnostics}"
+            ) from exc
+
+    def _source_stepping(
+        self, ctx: _Context, x0: np.ndarray | None
+    ) -> tuple[np.ndarray, int]:
+        """Ramp independent sources from 0 to 1 with adaptive step control."""
+        x = x0
+        alpha = 0.0
+        step = 0.1
+        iterations = 0
+        while alpha < 1.0 - 1e-12:
+            target = min(alpha + step, 1.0)
+            try:
+                x, iterations = self._newton(
+                    replace(ctx, source_scale=target), x
+                )
+            except ConvergenceError:
+                step *= 0.5
+                if step < 1e-4:
+                    raise ConvergenceError(
+                        f"source stepping stalled at alpha={alpha:.3f}"
+                    )
+                continue
+            alpha = target
+            step = min(step * 1.5, 0.25)
         assert x is not None
-        return x, last_iterations
+        return x, iterations
+
+    def _residual_diagnostics(
+        self, x: np.ndarray | None, ctx: _Context
+    ) -> str:
+        if x is None:
+            vector = np.zeros(self.size)
+        else:
+            vector = np.asarray(x, dtype=float)
+        if vector.shape[0] != self.size:
+            return "no residual information"
+        try:
+            A, b = self._assemble(vector, ctx)
+            residual = A @ vector - b
+        except (ValueError, TypeError, FloatingPointError):
+            return "no residual information"
+        names = [*self.unknown_names, *self.branches]
+        order = np.argsort(np.abs(residual))[::-1][:5]
+        parts = [
+            f"{names[index]}={residual[index]:.3g}"
+            for index in order
+            if index < len(names) and np.isfinite(residual[index])
+        ]
+        return "largest residuals: " + ", ".join(parts)
+
 
     # -------------------------------------------------------------- analyses
     def operating_point(self) -> OperatingPoint:
         ctx = _Context(mode="op", gmin=self.opt.gmin)
         x, iterations = self._solve_dc(ctx, None)
         return self._operating_point(x, iterations)
+
+    # ----------------------------------------------------------- sensitivity
+    @staticmethod
+    def _op_signal(result: OperatingPoint, signal: str) -> float:
+        """Value of ``V(node)``, ``V(a,b)`` or ``I(element)`` at an OP."""
+        text = signal.strip()
+        lowered = text.lower()
+        if lowered.startswith("v(") and lowered.endswith(")"):
+            parts = [part.strip() for part in text[2:-1].split(",")]
+            if len(parts) > 2:
+                raise ValueError(f"invalid voltage signal: {signal!r}")
+            values = [
+                (0.0 if name.lower() in GROUND_NAMES else result.nodes.get(name.lower(), 0.0))
+                for name in parts
+            ]
+            return float(values[0]) if len(values) == 1 else float(values[0] - values[1])
+        if lowered.startswith("i(") and lowered.endswith(")"):
+            key = text[2:-1].strip()
+            mapping = {name.lower(): value for name, value in result.currents.items()}
+            if key.lower() not in mapping:
+                raise ValueError(f"unknown current in .sens: {signal}")
+            return float(mapping[key.lower()])
+        mapping = {name.lower(): value for name, value in result.nodes.items()}
+        if lowered in mapping:
+            return float(mapping[lowered])
+        currents = {name.lower(): value for name, value in result.currents.items()}
+        if lowered in currents:
+            return float(currents[lowered])
+        raise ValueError(f"unknown signal in .sens: {signal}")
+
+    @staticmethod
+    def _sensitivity_targets(circuit: Circuit) -> list:
+        """Elements whose value can be perturbed for sensitivity/MC."""
+        return [
+            el
+            for el in circuit.elements
+            if isinstance(el, Resistor)
+            or (isinstance(el, (VSource, ISource)) and el.tol is not None)
+        ]
+
+    @staticmethod
+    def _set_target_value(element, value: float) -> None:
+        if isinstance(element, Resistor):
+            element.value = value
+        elif isinstance(element, (VSource, ISource)):
+            element.dc = value
+
+    @staticmethod
+    def _target_value(element) -> float:
+        return element.value if isinstance(element, Resistor) else element.dc
+
+    def _sensitivity_at(
+        self, circuit: Circuit, output: str, element, factor: float
+    ) -> float:
+        varied = copy.deepcopy(circuit)
+        target = next(el for el in varied.elements if el.name == element.name)
+        self._set_target_value(target, self._target_value(element) * factor)
+        return self._op_signal(Simulation(varied).operating_point(), output)
+
+    def sensitivity(
+        self,
+        output: str,
+        top: int = 8,
+        devices: int = 6,
+        tol: float = 0.05,
+        circuit: Circuit | None = None,
+    ) -> dict:
+        """Rank DC operating-point sensitivities and find the worst corners.
+
+        The normalized sensitivity is ``(dY/dP) * P / Y`` so values with very
+        different units can be compared. Only resistors and sources that
+        declare ``TOL=`` perturb the DC solution; capacitors and inductors are
+        open/short at DC and are therefore skipped.
+        """
+        base = circuit if circuit is not None else self.circuit
+        nominal = self._op_signal(Simulation(base).operating_point(), output)
+        entries: list[dict] = []
+        for element in self._sensitivity_targets(base):
+            value = self._target_value(element)
+            if value == 0.0:
+                continue
+            relative = element.tol if element.tol is not None else tol
+            if relative <= 0.0:
+                continue
+            # A small relative step gives an accurate derivative; ``relative``
+            # is reserved for the worst-case corner sweep.
+            step = 1e-4
+            plus = self._sensitivity_at(base, output, element, 1.0 + step)
+            minus = self._sensitivity_at(base, output, element, 1.0 - step)
+            derivative = (plus - minus) / (2.0 * step * value)
+            normalized = (
+                derivative * value / nominal if abs(nominal) > 1e-12 else derivative
+            )
+            entries.append(
+                {
+                    "name": element.name,
+                    "value": float(value),
+                    "derivative": float(derivative),
+                    "sensitivity": float(normalized),
+                    "tol": float(relative),
+                }
+            )
+        entries.sort(key=lambda entry: abs(entry["sensitivity"]), reverse=True)
+
+        selected = entries[: min(max(devices, 1), 10)]
+        worst = self._worst_case(base, output, selected)
+        return {
+            "output": output,
+            "nominal": float(nominal),
+            "entries": entries[: max(top, 1)],
+            "ranked": entries,
+            "worst_case": worst,
+        }
+
+    def _worst_case(self, circuit: Circuit, output: str, entries: list[dict]) -> dict:
+        if not entries:
+            nominal = self._op_signal(Simulation(circuit).operating_point(), output)
+            return {"min": {"value": float(nominal), "case": {}}, "max": {"value": float(nominal), "case": {}}}
+        factors = [(1.0 - entry["tol"], 1.0 + entry["tol"]) for entry in entries]
+        best: dict | None = None
+        worst: dict | None = None
+        for combo in product(*factors):
+            varied = copy.deepcopy(circuit)
+            case: dict[str, float] = {}
+            for entry, factor in zip(entries, combo):
+                target = next(el for el in varied.elements if el.name == entry["name"])
+                value = self._target_value(target) * factor
+                self._set_target_value(target, value)
+                case[entry["name"]] = float(value)
+            try:
+                value = self._op_signal(Simulation(varied).operating_point(), output)
+            except ConvergenceError:
+                continue
+            point = {"value": float(value), "case": case}
+            if best is None or value < best["value"]:
+                best = point
+            if worst is None or value > worst["value"]:
+                worst = point
+        if best is None or worst is None:
+            nominal = self._op_signal(Simulation(circuit).operating_point(), output)
+            return {"min": {"value": float(nominal), "case": {}}, "max": {"value": float(nominal), "case": {}}}
+        return {"min": best, "max": worst}
+
+    def _apply_sensitivity(self) -> None:
+        self.sensitivity_report = []
+        if not self.circuit.sensitivity:
+            return
+        if self.circuit.mc_runs > 0:
+            self.circuit.warnings.append(
+                ".sens is ignored with .mc; run sensitivity on the nominal circuit"
+            )
+            return
+        if any(isinstance(a, StepAnalysis) for a in self.circuit.analyses):
+            self.circuit.warnings.append(
+                ".sens uses the base circuit and ignores .step cases"
+            )
+        for spec in self.circuit.sensitivity:
+            try:
+                self.sensitivity_report.append(
+                    self.sensitivity(
+                        spec.output,
+                        top=spec.top,
+                        devices=spec.devices,
+                        tol=spec.tol,
+                    )
+                )
+            except (ValueError, ConvergenceError) as exc:
+                self.circuit.warnings.append(f".sens {spec.output}: {exc}")
+
 
     def _operating_point(self, x: np.ndarray, iterations: int) -> OperatingPoint:
         currents = {
@@ -1984,6 +2216,7 @@ class Simulation:
             {"label": label, "indices": indices}
             for label, indices in groups.items()
         ]
+        self._apply_sensitivity()
         if self.circuit.mc_runs <= 0:
             return
         self.yield_summary = self._measurement_stats(results)

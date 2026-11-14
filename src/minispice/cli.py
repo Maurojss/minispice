@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .parser import NetlistError, NetlistParser
+from .parser import NetlistError, NetlistParser, SensitivitySpec
 from .results import AcResult, DcSweep, NoiseResult, OperatingPoint, Transient
 from .solver import ConvergenceError, Simulation
 
@@ -85,6 +85,31 @@ def _write_summary_csv(summary: dict[str, dict[str, float]], path: Path) -> None
             )
 
 
+def _print_sensitivity(reports: list[dict]) -> None:
+    for report in reports:
+        print(f"Sensitivity: {report['output']}")
+        print(f"  nominal = {report['nominal']:.6g}")
+        print(f"  {'device':<12}{'value':>12}{'dY/dP':>14}{'normalized':>14}")
+        for entry in report["entries"]:
+            print(
+                f"  {entry['name']:<12}{entry['value']:>12.6g}"
+                f"{entry['derivative']:>14.4g}{entry['sensitivity']:>14.4g}"
+            )
+        worst = report.get("worst_case") or {}
+        low, high = worst.get("min"), worst.get("max")
+        if low and high:
+            def label(point: dict) -> str:
+                return ", ".join(
+                    f"{name}={value:g}" for name, value in point["case"].items()
+                ) or "nominal"
+
+            print(
+                f"  worst case: min {low['value']:.6g} ({label(low)})"
+                f" / max {high['value']:.6g} ({label(high)})"
+            )
+        print()
+
+
 def _plot_path(base: Path, index: int, total: int) -> Path:
     if total == 1:
         return base
@@ -110,6 +135,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--show", action="store_true", help="show plots interactively")
     parser.add_argument("--csv", metavar="PATH",
                         help="export results to CSV (Monte Carlo writes one summary CSV)")
+    parser.add_argument(
+        "--sensitivity",
+        metavar="SIGNAL",
+        help="rank DC operating-point sensitivities and report worst-case corners",
+    )
+    parser.add_argument(
+        "--worst-case",
+        metavar="SIGNAL",
+        help="alias for --sensitivity (the report always includes worst-case corners)",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="only errors")
     args = parser.parse_args(argv)
 
@@ -129,6 +164,9 @@ def main(argv: list[str] | None = None) -> int:
         if not args.netlist:
             parser.error("the following arguments are required: netlist")
         circuit = NetlistParser.from_file(args.netlist).parse()
+        signal = args.sensitivity or args.worst_case
+        if signal:
+            circuit.sensitivity.append(SensitivitySpec(signal))
         simulation = Simulation(circuit)
         results = simulation.run()
     except (NetlistError, ConvergenceError, ValueError, FileNotFoundError) as exc:
@@ -171,6 +209,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"  {' '.join(bounds)}"
             )
         print()
+
+    sensitivity = getattr(simulation, "sensitivity_report", [])
+    if sensitivity and not args.quiet:
+        _print_sensitivity(sensitivity)
 
     if args.csv and summary:
         path = Path(args.csv).with_suffix(".csv")

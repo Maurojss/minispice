@@ -618,3 +618,87 @@ def test_step_and_gaussian_monte_carlo_combine():
     )
     assert set(simulation.yield_by_case) == {"r=1000", "r=2000"}
     assert simulation.yield_summary["vout"]["total"] == 16
+
+
+def test_sensitivity_ranking_and_worst_case_corners():
+    circuit = NetlistParser(
+        "Divider sensitivity\n"
+        "V1 in 0 1\n"
+        "R1 in out 1k TOL=0.1\n"
+        "R2 out 0 1k TOL=0.1\n"
+        ".sens V(out) TOP=5 DEVICES=2\n"
+        ".op\n.end\n"
+    ).parse()
+    spec = circuit.sensitivity[0]
+    assert spec.output == "V(out)"
+    assert spec.top == 5 and spec.devices == 2
+
+    simulation = Simulation(circuit)
+    simulation.run()
+    report = simulation.sensitivity_report[0]
+    assert report["nominal"] == pytest.approx(0.5)
+    entries = {entry["name"]: entry for entry in report["entries"]}
+    assert entries["R1"]["sensitivity"] == pytest.approx(-0.5, abs=1e-4)
+    assert entries["R2"]["sensitivity"] == pytest.approx(0.5, abs=1e-4)
+
+    worst = report["worst_case"]
+    assert worst["min"]["value"] == pytest.approx(0.45, rel=1e-5)
+    assert worst["max"]["value"] == pytest.approx(0.55, rel=1e-5)
+    assert worst["min"]["case"] == {"R1": pytest.approx(1100.0), "R2": pytest.approx(900.0)}
+
+
+def test_sensitivity_validation():
+    from minispice import NetlistError
+
+    with pytest.raises(NetlistError):
+        NetlistParser(
+            "bad\nV1 in 0 1\nR1 in out 1k\n.sens\n.op\n.end\n"
+        ).parse()
+    with pytest.raises(NetlistError):
+        NetlistParser(
+            "bad\nV1 in 0 1\nR1 in out 1k\n.sens V(out) BOGUS=1\n.op\n.end\n"
+        ).parse()
+
+
+def test_source_stepping_fallback_converges(monkeypatch):
+    from minispice.solver import ConvergenceError
+
+    original = Simulation._newton
+    state = {"started": False}
+
+    def flaky(self, ctx, x0=None):
+        if ctx.source_scale < 1.0:
+            state["started"] = True
+            return original(self, ctx, x0)
+        if state["started"]:
+            return original(self, ctx, x0)
+        raise ConvergenceError("forced direct failure")
+
+    monkeypatch.setattr(Simulation, "_newton", flaky)
+    simulation = Simulation(
+        NetlistParser(
+            "Fallback\nV1 in 0 1\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n"
+        ).parse()
+    )
+    result = simulation.operating_point()
+    assert state["started"] is True
+    assert result.nodes["out"] == pytest.approx(0.5)
+
+
+def test_convergence_failure_reports_residuals(monkeypatch):
+    from minispice.solver import ConvergenceError
+
+    def always_fail(self, ctx, x0=None):
+        raise ConvergenceError("forced")
+
+    monkeypatch.setattr(Simulation, "_newton", always_fail)
+    simulation = Simulation(
+        NetlistParser(
+            "No convergence\nV1 in 0 1\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n"
+        ).parse()
+    )
+    with pytest.raises(ConvergenceError) as excinfo:
+        simulation.operating_point()
+    message = str(excinfo.value)
+    assert "source/gmin stepping failed" in message
+    assert "largest residuals:" in message
