@@ -1,0 +1,11 @@
+* NPN common emitter with a VCVS output buffer
+VCC vcc 0 5
+VIN in 0 0.7
+RB in b 100k
+RC vcc c 1k
+Q1 c b 0 qmod
+.model qmod NPN(IS=1e-15 BF=100 VAF=100)
+E1 out 0 c 0 1
+R2 out 0 10k
+.op
+.end

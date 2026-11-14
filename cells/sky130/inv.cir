@@ -1,0 +1,5 @@
+* Inverter, topology matches sky130_fd_sc_hd inv_1
+.subckt inv a y vdd
+MP y a vdd vdd pfet_01v8 W=3u L=0.15u
+MN y a 0 0 nfet_01v8 W=1u L=0.15u
+.ends

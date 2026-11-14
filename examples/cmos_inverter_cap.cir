@@ -1,0 +1,18 @@
+CMOS inverter with PDK-derived capacitance - delays vs Weste & Harris estimate
+* Capacitances computed by pdk/sky130/capacitance.py (sky130 tt, W/L of
+* the compound cells: nfet 1u/0.15u, pfet 3u/0.15u):
+*   CGG  (gate, channel+overlap): nfet 1.74 fF, pfet 3.99 fF
+*   Cj   at V = VDD/2 (junction, D = 0.5 um): nfet 0.68 fF, pfet 1.59 fF
+*   total output load = self-loading 2.27 fF + next-stage gate 5.73 fF
+*   -> CL = 8.00 fF
+* Predicted: tPHL = 0.69*Req*CL = 5.35 ps, tPLH = 7.12 ps
+* Measured below: tPHL = 5.61 ps, tPLH = 7.41 ps  (< 5% error)
+VDD vdd 0 1.8
+VIN in 0 PULSE(0 1.8 0 1p 1p 60p 120p)
+MP out in vdd vdd PMOS W=3u L=0.15u
+MN out in 0 0 NMOS W=1u L=0.15u
+CL out 0 8.0f
+.model NMOS NMOS(VTO=0.52 KP=240u LAMBDA=0.03 GAMMA=0.907 PHI=0.6)
+.model PMOS PMOS(VTO=-0.75 KP=86u LAMBDA=0.05 GAMMA=0.43 PHI=0.6)
+.tran 20f 120p
+.end

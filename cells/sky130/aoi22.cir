@@ -1,0 +1,13 @@
+* AOI22 compound gate: y = !((a AND b) OR (c AND d))
+* sky130 name: a22o.  Pull-down: two series pairs in parallel.
+* Pull-up (complement): two parallel pairs in series.
+.subckt aoi22 a b c d y vdd
+MN1 n1 a 0 0 nfet_01v8 W=1u L=0.15u
+MN2 y b n1 0 nfet_01v8 W=1u L=0.15u
+MN3 n2 c 0 0 nfet_01v8 W=1u L=0.15u
+MN4 y d n2 0 nfet_01v8 W=1u L=0.15u
+MP1 x a vdd vdd pfet_01v8 W=3u L=0.15u
+MP2 x b vdd vdd pfet_01v8 W=3u L=0.15u
+MP3 y c x vdd pfet_01v8 W=3u L=0.15u
+MP4 y d x vdd pfet_01v8 W=3u L=0.15u
+.ends

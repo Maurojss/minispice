@@ -1,0 +1,13 @@
+* Advanced measurements: edges, pulse width and AC figures of merit
+V1 in 0 PULSE(0 1 0 1n 1n 5m 10m) AC 1
+R1 in out 1k
+C1 out 0 1u
+.tran 10u 20m
+.ac dec 50 1 1e5
+.meas tran trise RISE V(out)
+.meas tran tfall FALL V(out) FROM=4m TO=20m
+.meas tran width WIDTH V(out) VAL=0.5
+.meas ac gain GAIN V(out) AT=1
+.meas ac bw BW V(out)
+.meas ac phase PHASE V(out) AT=159.15
+.end

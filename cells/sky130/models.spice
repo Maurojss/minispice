@@ -1,0 +1,6 @@
+* sky130-inspired Level-1 models for the compound cells (see pdk/sky130/)
+* VTO from vth0 and KP from u0*eps_ox/tox of sky130_fd_pr__{n,p}fet_01v8
+* (tt PM3 models, small-geometry bins). GAMMA = k1, PHI ~= 2*phi_f(ndep).
+* LAMBDA is a teaching value, not a PDK parameter.
+.model nfet_01v8 NMOS(VTO=0.52 KP=240u LAMBDA=0.03 GAMMA=0.907 PHI=0.6)
+.model pfet_01v8 PMOS(VTO=-0.75 KP=86u LAMBDA=0.05 GAMMA=0.43 PHI=0.6)

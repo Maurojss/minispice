@@ -1,0 +1,9 @@
+Subcircuit example: a resistive divider
+V1 1 0 10
+X1 1 2 divider
+.subckt divider in out
+R1 in out 1k
+R2 out 0 1k
+.ends
+.op
+.end

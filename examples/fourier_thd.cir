@@ -1,0 +1,9 @@
+* Diode clipper: a clean 1 kHz sine acquires odd harmonics.
+* .four reports the first five harmonic amplitudes and THD.
+V1 in 0 SIN(0 1 1k)
+R1 in out 100
+D1 out 0 dmod
+.model dmod D(IS=1e-14 N=1)
+.tran 1u 10m
+.four 1k V(out)
+.end

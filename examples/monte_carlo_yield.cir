@@ -1,0 +1,8 @@
+* Monte Carlo yield: resistor divider with a 10% tolerance
+V1 in 0 1
+R1 in out 1k TOL=0.1
+R2 out 0 1k TOL=0.1
+.dc V1 0.9 1.0 0.1
+.meas dc vout MAX V(out) MIN=0.47 MAX=0.53
+.mc 200 SEED=42
+.end

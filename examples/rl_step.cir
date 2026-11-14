@@ -1,0 +1,6 @@
+RL step response, tau = L/R = 100 us
+V1 in 0 PULSE(0 1 0 1n 1n 100m 200m)
+R1 in out 10
+L1 out 0 1m
+.tran 2u 1m
+.end

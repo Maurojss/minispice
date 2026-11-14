@@ -1,0 +1,9 @@
+* Monte Carlo: 5% resistors around a 1:1 divider
+* Reports mean/std/min/max of V(out) over 100 runs.
+V1 in 0 1
+R1 in out 1k TOL=0.05
+R2 out 0 1k TOL=0.05
+.dc V1 1 1 1
+.meas dc vout MAX V(out)
+.mc 100 SEED=42
+.end

@@ -1,0 +1,12 @@
+* User functions, if(), gauss() and Gaussian/correlated Monte Carlo
+.func sq(x) = {x*x}
+.func clip01(x) = {if(sq(x) > 1, 1, sq(x))}
+.param DRIVE = {clip01(0.8)}
+.param R1NOM = {gauss(1k, 20)}
+V1 in 0 {DRIVE}
+R1 in out {R1NOM} TOL=0.1
+R2 out 0 1k TOL=0.1
+.dc V1 0.5 1.0 0.1
+.meas dc vout MAX V(out) MIN=0.4 MAX=0.62
+.mc 200 SEED=7 DIST=GAUSS SIGMA=0.05 RHO=0.5
+.end

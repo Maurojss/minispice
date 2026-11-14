@@ -1,0 +1,9 @@
+* Parameter sweep: resistive divider with R stepped from 1k to 5k
+* V(out) = V(in) * R2 / (R + R2)
+.param R=1k
+V1 in 0 1
+R1 in out {R}
+R2 out 0 1k
+.step param R LIST 1k 2k 3k 4k 5k
+.op
+.end

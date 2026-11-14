@@ -1,0 +1,9 @@
+* RC lowpass - AC frequency response (Bode plot)
+*
+* Cutoff: fc = 1/(2*pi*R*C) ~ 159.2 Hz
+* -3 dB at fc, -20 dB per decade above it
+V1 in 0 dc 0 ac 1 0
+R1 in out 1k
+C1 out 0 1u
+.ac dec 20 10 100K
+.end

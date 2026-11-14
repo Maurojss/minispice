@@ -1,0 +1,21 @@
+* MUX21 compound gate with complementary output: y = !(s ? i0 : i1)
+* 4-transistor complex gate + internal select inverter (8 transistors).
+.subckt inv a y vdd
+MP y a vdd vdd pfet_01v8 W=3u L=0.15u
+MN y a 0 0 nfet_01v8 W=1u L=0.15u
+.ends
+
+.subckt mux21 i0 i1 s y vdd
+* inverted select
+XIN s sin vdd inv
+* pull-down: (s series i0) parallel (sin series i1)
+MN1 m1 s 0 0 nfet_01v8 W=1u L=0.15u
+MN2 y i0 m1 0 nfet_01v8 W=1u L=0.15u
+MN3 m2 sin 0 0 nfet_01v8 W=1u L=0.15u
+MN4 y i1 m2 0 nfet_01v8 W=1u L=0.15u
+* pull-up: (i0 parallel s) series (i1 parallel sin)
+MP1 x i0 vdd vdd pfet_01v8 W=3u L=0.15u
+MP2 x s vdd vdd pfet_01v8 W=3u L=0.15u
+MP3 y i1 x vdd pfet_01v8 W=3u L=0.15u
+MP4 y sin x vdd pfet_01v8 W=3u L=0.15u
+.ends

@@ -1,0 +1,9 @@
+* Behavioral sources: polynomial voltage transfer and a V-to-I converter.
+* B sources accept V(node), V(a,b), I(element), .param names and time.
+V1 in 0 SIN(0 0.5 1k)
+B1 out 0 V={V(in) + 0.5*V(in)*V(in)}
+R1 out 0 1k
+B2 cur 0 I={V(in)/1k}
+R2 cur 0 1k
+.tran 10u 3m
+.end

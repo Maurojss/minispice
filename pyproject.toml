@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minispice"
+version = "0.1.0"
+description = "A small educational SPICE-like circuit simulator with MNA, Newton-Raphson, DC/AC/transient/noise, sweeps and Monte Carlo"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Mauro Sousa" }]
+keywords = ["spice", "circuit-simulation", "electronics", "mna", "eda"]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+gui = ["matplotlib>=3.7", "schemdraw>=0.23"]
+sparse = ["scipy>=1.10"]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "schemdraw>=0.23",
+    "esprima>=4",
+]
+
+[project.scripts]
+minispice = "minispice.cli:main"
+minispice-gui = "minispice.webui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F", "I"]
+
+[tool.coverage.run]
+source = ["minispice"]
+
+[tool.coverage.report]
+fail_under = 75
+skip_covered = false

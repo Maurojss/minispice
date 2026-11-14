@@ -1,0 +1,10 @@
+* Gummel-Poon subset: high-injection knee (IKF) and non-ideal base current (ISE)
+* beta falls from its low-current value as Ic approaches IKF.
+VCC vcc 0 5
+VIN in 0 0.8
+RB in b 100k
+RC vcc c 1k
+Q1 c b 0 qmod
+.model qmod NPN(IS=1e-15 BF=100 IKF=0.15m ISE=1e-14 NE=1.5)
+.op
+.end

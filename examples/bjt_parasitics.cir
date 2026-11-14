@@ -1,0 +1,10 @@
+* BJT with series resistances and charge storage
+* RB/RC/RE slow the bias point; CJE/CJC/TF shape the transient edge.
+VCC vcc 0 5
+VIN in 0 PULSE(0 0.8 10n 1n 1n 1u 2u)
+RB in b 10k
+RC vcc c 10k
+Q1 c b 0 qmod
+.model qmod NPN(IS=1e-15 BF=100 RB=1k RC=20 RE=5 CJE=20p CJC=5p TF=2n)
+.tran 1n 3u
+.end

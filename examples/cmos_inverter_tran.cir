@@ -1,0 +1,10 @@
+CMOS inverter transient with a 10 fF load
+VDD vdd 0 1.8
+VIN in 0 PULSE(0 1.8 0 100p 100p 2n 4n)
+MP out in vdd vdd PMOS W=2u L=1u
+MN out in 0 0 NMOS W=1u L=1u
+CL out 0 10f
+.model NMOS NMOS(VTO=0.5 KP=120u LAMBDA=0.02 GAMMA=0.4 PHI=0.7)
+.model PMOS PMOS(VTO=-0.5 KP=60u LAMBDA=0.02 GAMMA=0.4 PHI=0.7)
+.tran 10p 8n
+.end

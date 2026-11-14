@@ -1,0 +1,7 @@
+* RC low-pass noise: output PSD approaches 4kT*R at low frequency
+* and the integrated output noise approaches sqrt(kT/C).
+V1 in 0 dc 0 ac 1
+R1 in out 1k
+C1 out 0 1u
+.noise V(out) V1 dec 20 1 1e9
+.end

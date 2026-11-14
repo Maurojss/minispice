@@ -1,0 +1,12 @@
+* Parameterized RC step with .meas rise time
+.param R=1k
+.param C=1u
+V1 in 0 PULSE(0 1 0 1n 1n 10m 20m)
+R1 in out {R}
+C1 out 0 {C}
+.tran 10u 5m
+.meas tran trise TRIG v(out) VAL=0.1 RISE=1 TARG v(out) VAL=0.9 RISE=1
+.meas tran vmax MAX v(out)
+.meas tran vavg AVG v(out)
+.meas tran vrms RMS v(out)
+.end
