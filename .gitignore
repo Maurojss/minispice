@@ -9,3 +9,8 @@ dist/
 htmlcov/
 /*.png
 /*.csv
+
+# OpenCode runtime artifacts (agents/skills em si sao versionados)
+.opencode/node_modules/
+.opencode/service.json
+.opencode/package-lock.json
