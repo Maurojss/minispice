@@ -173,6 +173,8 @@ def schematic_png(circuit: Circuit, path: str | io.BytesIO) -> bool:
     if not elements:
         return False
     positions = _node_positions(elements)
+    if not positions:  # only grounded devices (e.g. "R1 0 0 1k"): empty canvas
+        return False
     hangs: defaultdict[str, int] = defaultdict(int)     # grounded devices per node
     n_fets: defaultdict[str, int] = defaultdict(int)    # NMOS per node column
     p_fets: defaultdict[str, int] = defaultdict(int)    # PMOS per node column

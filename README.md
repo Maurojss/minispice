@@ -100,8 +100,10 @@ SPICE semantics and is validated against analytic results.
   `oai21`, `aoi22`, `oai22` and `mux21` as sky130-inspired subcircuits, with the
   real sky130 PDK BSIM4 files vendored for reference (see
   [below](#compound-gates-with-the-sky130-pdk)).
-- **Tests:** 198 passing — engine, parser, DC, transient, AC, devices, CLI, GUI,
-  leakage, parameters/measurements, dependent and behavioral sources (DC and AC
+- **Tests:** 243 passing (plus 1 strict xfail documenting a known renderer
+  edge case) — engine, parser, DC, transient, AC, devices, CLI, GUI and
+  schematic rendering, leakage, parameters/measurements, dependent and
+  behavioral sources (DC and AC
   stamps), noise, distortion, stepping, Monte Carlo, BJT and the compound cells (including 66
   truth-table rows). CI runs the whole suite on every push and enforces 75%
   coverage.

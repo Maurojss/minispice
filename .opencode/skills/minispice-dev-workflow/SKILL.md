@@ -21,8 +21,8 @@ pre-commit install            # optional: ruff hook on commit
 ## Quality gates (run before reporting done)
 
 ```bash
-pytest                                        # suite (currently 198 tests), addopts already -q
-pytest --cov=minispice --cov-fail-under=75    # CI enforces 75% coverage (currently ~84%)
+pytest                                        # suite (currently 243 tests), addopts already -q
+pytest --cov=minispice --cov-fail-under=75    # CI enforces 75% coverage (currently ~86%)
 ruff check src tests scripts tools            # select = ["E9", "F", "I"], line-length 100
 ```
 
