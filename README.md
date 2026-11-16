@@ -6,7 +6,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-188%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-198%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-numpy%20%2B%20matplotlib-orange)
 
 </div>
@@ -100,9 +100,9 @@ SPICE semantics and is validated against analytic results.
   `oai21`, `aoi22`, `oai22` and `mux21` as sky130-inspired subcircuits, with the
   real sky130 PDK BSIM4 files vendored for reference (see
   [below](#compound-gates-with-the-sky130-pdk)).
-- **Tests:** 188 passing — engine, parser, DC, transient, AC, devices, CLI, GUI,
-  leakage, parameters/measurements, dependent and behavioral sources, noise,
-  distortion, stepping, Monte Carlo, BJT and the compound cells (including 66
+- **Tests:** 198 passing — engine, parser, DC, transient, AC, devices, CLI, GUI,
+  leakage, parameters/measurements, dependent and behavioral sources (DC and AC
+  stamps), noise, distortion, stepping, Monte Carlo, BJT and the compound cells (including 66
   truth-table rows). CI runs the whole suite on every push and enforces 75%
   coverage.
 
