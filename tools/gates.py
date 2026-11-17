@@ -4,6 +4,10 @@ Each cell lives in ``cells/sky130/<name>.cir`` as a SPICE ``.subckt`` with a
 ``vdd`` port and an output port ``y``.  The expected logic is stored here so
 that both the pytest suite and the ``verify_gates.py`` script share one source
 of truth.
+
+Multi-output cells (e.g. ``fa`` with ``sum``/``cout``) register one ``Gate`` per
+output: the entries share ``cell``/``inputs`` and differ in ``output``, so the
+single-output test loop keeps working unchanged.
 """
 
 from __future__ import annotations
@@ -26,11 +30,21 @@ class Gate:
     inputs: tuple[str, ...]
     logic: str  # human-readable expression
     expect: callable  # inputs (0/1) -> 0/1
+    output: str = "y"  # output node under test
+    cell: str = ""  # netlist basename, defaults to ``name``
+
+    def __post_init__(self) -> None:
+        if not self.cell:
+            self.cell = self.name
 
     @property
     def port_order(self) -> tuple[str, ...]:
         # X-instance port order must match the .subckt declaration.
-        return dict_port_order[self.name]
+        return dict_port_order[self.cell]
+
+    @property
+    def outputs(self) -> tuple[str, ...]:
+        return dict_output_ports.get(self.cell, ("y",))
 
 
 # Port order as declared in each netlist file (.subckt <name> ... y vdd).
@@ -43,6 +57,12 @@ dict_port_order: dict[str, tuple[str, ...]] = {
     "aoi22": ("a", "b", "c", "d"),
     "oai22": ("a", "b", "c", "d"),
     "mux21": ("i0", "i1", "s"),
+    "fa": ("a", "b", "cin"),
+}
+
+# Output ports after the inputs (default: the single port `y`).
+dict_output_ports: dict[str, tuple[str, ...]] = {
+    "fa": ("sum", "cout"),
 }
 
 GATES: dict[str, Gate] = {
@@ -75,6 +95,15 @@ GATES: dict[str, Gate] = {
         "mux21", ("i0", "i1", "s"), "y = !(i0 if s else i1)",
         lambda i0, i1, s: 1 - (i0 if s else i1),
     ),
+    # Full adder: one netlist (fa.cir), one registry row per output.
+    "fa_sum": Gate(
+        "fa_sum", ("a", "b", "cin"), "sum = a ^ b ^ cin",
+        lambda a, b, cin: a ^ b ^ cin, output="sum", cell="fa",
+    ),
+    "fa_cout": Gate(
+        "fa_cout", ("a", "b", "cin"), "cout = (a & b) | (cin & (a ^ b))",
+        lambda a, b, cin: (a & b) | (cin & (a ^ b)), output="cout", cell="fa",
+    ),
 }
 
 
@@ -97,13 +126,14 @@ def build_testbench(gate: Gate, inputs: tuple[int, ...]) -> str:
     lines = [
         f"* testbench: {gate.name} {inputs}",
         f".include {MODELS}",
-        f".include {CELLS / (gate.name + '.cir')}",
+        f".include {CELLS / (gate.cell + '.cir')}",
         f"VDD vdd 0 {VDD}",
     ]
     for name, level in zip(gate.inputs, inputs):
         lines.append(f"V{name} {name} 0 {level * VDD}")
-    ports = " ".join(dict_port_order[gate.name])
-    lines.append(f"XG {ports} y vdd {gate.name}")
+    ports = " ".join(dict_port_order[gate.cell])
+    outs = " ".join(gate.outputs)
+    lines.append(f"XG {ports} {outs} vdd {gate.cell}")
     lines.append(".op")
     lines.append(".end")
     return "\n".join(lines) + "\n"

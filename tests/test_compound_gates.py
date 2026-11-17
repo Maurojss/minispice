@@ -3,20 +3,22 @@ import pytest
 from tools.gates import GATES, HIGH, LOW, VDD, build_testbench, combos
 
 ALL_GATES = list(GATES.values())
-# One (gate, inputs) case per truth-table row: 2+4+4+8+8+16+16+8 = 66 checks.
+# One (gate, inputs) case per truth-table row:
+# 2+4+4+8+8+16+16+8 (single-output cells) + 8+8 (fa sum/cout) = 82 checks.
 ALL_CASES = [(g, c) for g in ALL_GATES for c in combos(g)]
 CASE_IDS = [f"{g.name}-{''.join(map(str, c))}" for g, c in ALL_CASES]
 
 
 def test_registry_matches_netlist_ports():
-    """Declared inputs and output `y` must exist in the flattened circuit."""
+    """Declared inputs and outputs must exist in the flattened circuit."""
     from minispice import NetlistParser
 
     for gate in ALL_GATES:
         circuit = NetlistParser(
             build_testbench(gate, (0,) * len(gate.inputs))
         ).parse()
-        assert "y" in circuit.node_names
+        for out in gate.outputs:
+            assert out in circuit.node_names, (gate.name, out)
         for port in gate.inputs:
             assert port in circuit.node_names, (gate.name, port)
 

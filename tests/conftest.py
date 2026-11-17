@@ -29,6 +29,6 @@ def eval_gate():
 
         circuit = NetlistParser(build_testbench(gate, inputs)).parse()
         result = Simulation(circuit).operating_point()
-        return result.nodes["y"]
+        return result.nodes[gate.output]
 
     return _eval

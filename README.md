@@ -97,13 +97,14 @@ SPICE semantics and is validated against analytic results.
   cursor, a case/run selector for `.step` and `.mc`, and Monte Carlo cards with
   measure histograms and yield (see [screenshots](#graphical-interface)).
 - **Compound cells at transistor level:** `inv`, `nand2`, `nor2`, `aoi21`,
-  `oai21`, `aoi22`, `oai22` and `mux21` as sky130-inspired subcircuits, with the
+  `oai21`, `aoi22`, `oai22`, `mux21` and a 34-FET full adder `fa` as
+  sky130-inspired subcircuits, with the
   real sky130 PDK BSIM4 files vendored for reference (see
   [below](#compound-gates-with-the-sky130-pdk)).
-- **Tests:** 262 passing — engine, parser, DC, transient, AC, devices, CLI, GUI and
+- **Tests:** 278 passing — engine, parser, DC, transient, AC, devices, CLI, GUI and
   schematic rendering, leakage, parameters/measurements, dependent and
   behavioral sources (DC and AC
-  stamps), noise, distortion, stepping, Monte Carlo, BJT and the compound cells (including 66
+  stamps), noise, distortion, stepping, Monte Carlo, BJT and the compound cells (including 82
   truth-table rows). CI runs the whole suite on every push and enforces 75%
   coverage.
 
@@ -425,7 +426,13 @@ project:
 | `oai21` | `y = !((a \| b) & c)` | 6 |
 | `aoi22` | `y = !((a & b) \| (c & d))` | 8 |
 | `oai22` | `y = !((a \| b) & (c \| d))` | 8 |
-| `mux21` | `y = !(s ? i0 : i1)` | 8 |
+| `mux21` | `y = !(s ? i0 : i1)` | 10 |
+| `fa` | `sum = a ^ b ^ cin`, `cout = (a & b) \| (cin & (a ^ b))` | 34 |
+
+`fa` is the first **multi-output** cell: it is a flat 34-FET static-CMOS adder
+(XNOR of `a`,`b` from a NAND/NOR pair, `sum` from an inverting `mux21` selected
+by `cin`, `cout` from two NANDs), registered as two truth-table rows
+(`fa_sum`, `fa_cout`) that share the one netlist.
 
 ```spice
 * AOI21 compound gate: y = !((a AND b) OR c)   (sky130 name: a21o)
@@ -440,7 +447,7 @@ MP3 y c x vdd    pfet_01v8 W=3u L=0.15u
 ```
 
 The full truth table of every cell is verified at the operating point
-(66 combinations, switching margins `0.25/0.75·VDD`):
+(82 combinations, switching margins `0.25/0.75·VDD`):
 
 ```bash
 python scripts/verify_gates.py      # prints each truth table

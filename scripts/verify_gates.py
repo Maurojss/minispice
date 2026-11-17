@@ -21,7 +21,7 @@ from tools.gates import GATES, LOW, VDD, build_testbench, combos
 
 def run_case(gate, inputs):
     circuit = NetlistParser(build_testbench(gate, inputs)).parse()
-    y = Simulation(circuit).operating_point().nodes["y"]
+    y = Simulation(circuit).operating_point().nodes[gate.output]
     got = 0 if y <= LOW else 1 if y >= 0.75 * VDD else None
     return y, got
 
@@ -33,7 +33,7 @@ def main(argv: list[str]) -> int:
         gate = GATES[name]
         header = " ".join(gate.inputs)
         print(f"\n{gate.name}: {gate.logic}  (VDD = {VDD} V)")
-        print(f"  {header} | y_sim   logic  ok?")
+        print(f"  {header} | {gate.output:<5} logic  ok?")
         print("  " + "-" * (len(header) + 22))
         for inputs in combos(gate):
             y, got = run_case(gate, inputs)

@@ -1,0 +1,56 @@
+* Full adder: sum = a XOR b XOR cin,  cout = (a & b) | (cin & (a XOR b))
+* Flat 34-transistor static-CMOS cell (17 nfet + 17 pfet), no transmission
+* gates and no behavioral sources - the logic is in the topology only.
+* Shared intermediates: nab = !(a&b), sab = !(a|b), orab = a|b,
+* gab = !(a^b) (XNOR), xab = a^b (XOR), c1 = !(cin & xab).
+* Sizing: Wp = 3*Wn (KPn/KPp = 2.8) with Wn = 1u, L = 0.15u everywhere;
+* the deepest pMOS stack here is two devices (3u each -> 1.5u equivalent),
+* i.e. the same as nand2/nor2/mux21, which the Level-1 models resolve
+* cleanly, so no deviation from the default rule was needed.
+.subckt fa a b cin sum cout vdd
+* --- 1) nab = !(a & b)  (NAND2, pull-up parallel / pull-down series) ----
+MP1 nab a vdd vdd pfet_01v8 W=3u L=0.15u
+MP2 nab b vdd vdd pfet_01v8 W=3u L=0.15u
+MN1 t1 a 0 0 nfet_01v8 W=1u L=0.15u
+MN2 nab b t1 0 nfet_01v8 W=1u L=0.15u
+* --- 2) sab = !(a | b)  (NOR2, pull-up series / pull-down parallel) ------
+MP3 t2 a vdd vdd pfet_01v8 W=3u L=0.15u
+MP4 sab b t2 vdd pfet_01v8 W=3u L=0.15u
+MN3 sab a 0 0 nfet_01v8 W=1u L=0.15u
+MN4 sab b 0 0 nfet_01v8 W=1u L=0.15u
+* --- 3) orab = !sab = a | b  (inverter) ---------------------------------
+MP5 orab sab vdd vdd pfet_01v8 W=3u L=0.15u
+MN5 orab sab 0 0 nfet_01v8 W=1u L=0.15u
+* --- 4) gab = !(orab & nab) = !((a|b) & !(a&b)) = a XNOR b  (NAND2) -----
+MP6 gab orab vdd vdd pfet_01v8 W=3u L=0.15u
+MP7 gab nab vdd vdd pfet_01v8 W=3u L=0.15u
+MN6 t3 orab 0 0 nfet_01v8 W=1u L=0.15u
+MN7 gab nab t3 0 nfet_01v8 W=1u L=0.15u
+* --- 5) xab = !gab = a XOR b  (inverter) -------------------------------
+MP8 xab gab vdd vdd pfet_01v8 W=3u L=0.15u
+MN8 xab gab 0 0 nfet_01v8 W=1u L=0.15u
+* --- 6) sin = !cin  (select inverter of the sum mux) -------------------
+MP9 sin cin vdd vdd pfet_01v8 W=3u L=0.15u
+MN9 sin cin 0 0 nfet_01v8 W=1u L=0.15u
+* --- 7) sum = !(cin ? xab : gab) = xab XOR cin  (mux21 core) -----------
+* pull-down: (cin series xab) parallel (sin series gab)
+MN10 m1 cin 0 0 nfet_01v8 W=1u L=0.15u
+MN11 sum xab m1 0 nfet_01v8 W=1u L=0.15u
+MN12 m2 sin 0 0 nfet_01v8 W=1u L=0.15u
+MN13 sum gab m2 0 nfet_01v8 W=1u L=0.15u
+* pull-up: (xab parallel cin) series (gab parallel sin)
+MP10 s2 xab vdd vdd pfet_01v8 W=3u L=0.15u
+MP11 s2 cin vdd vdd pfet_01v8 W=3u L=0.15u
+MP12 sum gab s2 vdd pfet_01v8 W=3u L=0.15u
+MP13 sum sin s2 vdd pfet_01v8 W=3u L=0.15u
+* --- 8) c1 = !(cin & xab)  (NAND2) ------------------------------------
+MP14 c1 cin vdd vdd pfet_01v8 W=3u L=0.15u
+MP15 c1 xab vdd vdd pfet_01v8 W=3u L=0.15u
+MN14 t4 cin 0 0 nfet_01v8 W=1u L=0.15u
+MN15 c1 xab t4 0 nfet_01v8 W=1u L=0.15u
+* --- 9) cout = !(nab & c1) = (a&b) | (cin & (a^b))  (NAND2) -----------
+MP16 cout nab vdd vdd pfet_01v8 W=3u L=0.15u
+MP17 cout c1 vdd vdd pfet_01v8 W=3u L=0.15u
+MN16 t5 nab 0 0 nfet_01v8 W=1u L=0.15u
+MN17 cout c1 t5 0 nfet_01v8 W=1u L=0.15u
+.ends
