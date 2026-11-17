@@ -476,6 +476,50 @@ def test_ac_gain_phase_bandwidth_and_loopgain():
     assert loop.measurements["lg"] == pytest.approx(20 * math.log10(2), rel=1e-6)
 
 
+def test_ac_measure_of_a_branch_current_signal():
+    """An AC `.meas` can measure a branch current, not only a node voltage.
+
+    Closed form: the divider V1 in 0 ac 1 / R1 in out 1k / R2 out 0 1k is
+    frequency independent, so I(V1) = -1/2k = -0.5 mA at every point and
+    V(out) = 0.5 V. GAIN returns 20*log10 of the magnitude, hence
+    20*log10(5e-4) = -66.0206 dB for the current and 20*log10(0.5) =
+    -6.0206 dB for the node voltage. The bare name `V1` is not a node name
+    (the nodes are `in` and `out`), so it resolves to the same branch current.
+
+    The FROM/TO window keeps only the points between 100 Hz and 1 kHz, and a
+    window outside the sweep is reported as NaN plus a warning instead of
+    aborting the run, so the other measurements of the same card still land.
+
+    Tolerance: the gmin shunt (1e-12 S against the 1 mS arms) shifts the
+    branch current by 1e-9 relative, which is 8.7e-9 dB (measured 2.2e-8 dB);
+    abs=1e-6 dB keeps 45x margin.
+    """
+    circuit = NetlistParser(
+        "AC measure current\n"
+        "V1 in 0 dc 0 ac 1\n"
+        "R1 in out 1k\n"
+        "R2 out 0 1k\n"
+        ".ac lin 3 100 1000\n"
+        ".meas ac ig GAIN I(V1) AT=1000\n"
+        ".meas ac ibar GAIN V1 AT=1000\n"
+        ".meas ac win GAIN V(out) FROM=100 TO=1000\n"
+        ".meas ac nowin GAIN V(out) FROM=2e6 TO=3e6\n"
+        ".meas ac ibad GAIN NOPE\n"
+        ".end\n"
+    ).parse()
+    result = Simulation(circuit).run()[0]
+    assert list(result.freqs) == pytest.approx([100.0, 550.0, 1000.0])
+    assert result.measurements["ig"] == pytest.approx(20 * math.log10(5e-4), abs=1e-6)
+    assert result.measurements["ibar"] == pytest.approx(20 * math.log10(5e-4), abs=1e-6)
+    assert result.measurements["win"] == pytest.approx(20 * math.log10(0.5), abs=1e-6)
+    assert math.isnan(result.measurements["nowin"])
+    assert math.isnan(result.measurements["ibad"])
+    assert any(
+        "no AC point inside the measurement window" in w for w in circuit.warnings
+    )
+    assert any("unknown signal in .meas: NOPE" in w for w in circuit.warnings)
+
+
 def test_advanced_measure_validation():
     from minispice import NetlistError
 
@@ -645,6 +689,58 @@ def test_sensitivity_ranking_and_worst_case_corners():
     assert worst["min"]["value"] == pytest.approx(0.45, rel=1e-5)
     assert worst["max"]["value"] == pytest.approx(0.55, rel=1e-5)
     assert worst["min"]["case"] == {"R1": pytest.approx(1100.0), "R2": pytest.approx(900.0)}
+
+
+def test_sensitivity_accepts_a_branch_current_output():
+    """`.sens` can rank a branch current, not only a node voltage.
+
+    Closed form: for the divider V1 in 0 1 / R1 in out 1k / R2 out 0 1k the
+    branch current of V1 is I(V1) = -1/(R1+R2) = -0.5 mA. Its derivative is
+    dI/dR = 1/(R1+R2)^2 = 2.5e-7 A/Ohm, so the normalized sensitivity
+    (dI/dP)*P/I = 2.5e-7*1000/(-5e-4) = -0.5 for both resistors: a bigger
+    resistor lowers the current. The worst-case corners are R1 = R2 = 900
+    (-1/1800 = -555.6 uA) and R1 = R2 = 1100 (-1/2200 = -454.5 uA).
+
+    The bare name `V1` is not a node name (the nodes are `in` and `out`), so the
+    lookup falls back to the branch-current map and reports the same current.
+
+    Tolerance: the nominal carries the gmin offset of the branch current
+    (1.25e-11 A on 5e-4 A, i.e. 2.5e-8 relative), which the normalized
+    sensitivity inherits, so abs=1e-6 keeps 2000x margin and abs=1e-9 on the
+    corners keeps 80x margin.
+    """
+    circuit = NetlistParser(
+        "Divider sensitivity\n"
+        "V1 in 0 1\n"
+        "R1 in out 1k TOL=0.1\n"
+        "R2 out 0 1k TOL=0.1\n"
+        ".sens I(V1) TOP=5 DEVICES=2\n"
+        ".op\n.end\n"
+    ).parse()
+    simulation = Simulation(circuit)
+    simulation.run()
+    report = simulation.sensitivity_report[0]
+    assert report["nominal"] == pytest.approx(-5e-4, rel=1e-6, abs=1e-9)
+    entries = {entry["name"]: entry for entry in report["entries"]}
+    assert entries["R1"]["derivative"] == pytest.approx(2.5e-7, rel=1e-6)
+    assert entries["R2"]["derivative"] == pytest.approx(2.5e-7, rel=1e-6)
+    assert entries["R1"]["sensitivity"] == pytest.approx(-0.5, abs=1e-6)
+    assert entries["R2"]["sensitivity"] == pytest.approx(-0.5, abs=1e-6)
+    worst = report["worst_case"]
+    assert worst["min"]["value"] == pytest.approx(-1.0 / 1800.0, rel=1e-6, abs=1e-9)
+    assert worst["max"]["value"] == pytest.approx(-1.0 / 2200.0, rel=1e-6, abs=1e-9)
+
+    # A bare element name falls back to the branch-current map.
+    plain = Simulation(
+        NetlistParser(
+            "Divider\nV1 in 0 1\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n"
+        ).parse()
+    )
+    assert plain.sensitivity("V1")["nominal"] == pytest.approx(-5e-4, rel=1e-6, abs=1e-9)
+    with pytest.raises(ValueError, match="unknown current in .sens"):
+        plain.sensitivity("I(NOPE)")
+    with pytest.raises(ValueError, match="unknown signal in .sens"):
+        plain.sensitivity("NOPE")
 
 
 def test_sensitivity_validation():

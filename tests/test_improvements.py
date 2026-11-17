@@ -133,6 +133,43 @@ def test_measurement_on_dc_sweep():
     assert result.measurements["voutmax"] == pytest.approx(0.5)
 
 
+def test_measurement_of_a_branch_current_signal():
+    """`.meas` can measure a branch current, not only a node voltage.
+
+    Closed form: the divider V1 1 0 10 / R1 1 2 1k / R2 2 0 1k draws
+    I(V1) = -V1/(R1+R2) = -V1/2k, so over the sweep V1 = 0, 5, 10 the branch
+    current is 0, -2.5 mA and -5 mA. MIN is therefore -5 mA and AVG -2.5 mA.
+    The bare name `V1` is not a node name (the nodes are `1` and `2`), so the
+    lookup falls back to the branch-current map and measures the same value.
+
+    Tolerance: the gmin shunt (1e-12 S) across the divider leaks 1e-12 A at
+    the 1 V node, which shows up as a 1.25e-11 A offset (measured); rel=1e-6
+    (a 5e-9 A window) keeps 400x margin.
+
+    An unknown signal is reported as NaN plus a warning instead of aborting the
+    run, so the remaining measurements of the same card still land.
+    """
+    circuit = NetlistParser(
+        "DC measure current\n"
+        "V1 1 0 10\n"
+        "R1 1 2 1k\n"
+        "R2 2 0 1k\n"
+        ".dc V1 0 10 5\n"
+        ".meas dc imin MIN I(V1)\n"
+        ".meas dc iavg AVG I(V1)\n"
+        ".meas dc ibare AVG V1\n"
+        ".meas dc ibogus MAX NOPE\n"
+        ".end\n"
+    ).parse()
+    result = Simulation(circuit).run()[0]
+    assert list(result.sweep) == pytest.approx([0.0, 5.0, 10.0])
+    assert result.measurements["imin"] == pytest.approx(-5e-3, rel=1e-6, abs=1e-9)
+    assert result.measurements["iavg"] == pytest.approx(-2.5e-3, rel=1e-6, abs=1e-9)
+    assert result.measurements["ibare"] == pytest.approx(-2.5e-3, rel=1e-6, abs=1e-9)
+    assert math.isnan(result.measurements["ibogus"])
+    assert any("unknown signal in .meas: NOPE" in w for w in circuit.warnings)
+
+
 def test_operating_point_details_for_mosfets_and_diodes():
     result = Simulation(
         NetlistParser(

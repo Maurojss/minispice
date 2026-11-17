@@ -1,4 +1,4 @@
-"""MNA stamping of dependent sources (E/G/F/H) in DC and in the AC path.
+"""MNA stamping of dependent and behavioral sources (E/G/F/H/B) in DC and AC.
 
 Every circuit here has a closed-form answer derived by hand; the numbers in the
 assertions cite that derivation. The DC half exercises the differential
@@ -214,3 +214,88 @@ def test_vccs_ac_transconductance_into_rc_load():
     assert result.nodes["y"][0] == pytest.approx(-0.5 + 0.0j, rel=1e-6, abs=1e-9)
     # V1 only feeds the 2 kohm divider: I(V1) = -0.5 mA.
     assert result.currents["V1"][0] == pytest.approx(-0.5e-3 + 0.0j, rel=1e-6, abs=1e-12)
+
+
+def test_behavioral_voltage_source_ac_across_two_non_ground_nodes():
+    """B1 sits between `out` and `ref` (neither is ground) with V={2*V(in)}.
+
+    KCL at out: V(out)/1k + I_B = 0; at ref: V(ref)/1k - I_B = 0. Adding them
+    gives V(out) + V(ref) = 0, and the source constraint V(out) - V(ref) = 2 V
+    (1 V phasor times gain 2) splits it as V(out) = +1 V, V(ref) = -1 V, with
+    I_B1 = -V(out)/1k = -1 mA flowing out -> ref.
+    Tolerance: the AC solve is exact up to the gmin shunt (1e-12 S against
+    1 mS = 1e-9 relative) and roundoff; rel=1e-6 / abs=1e-9 (measured 0.0 V on
+    the node phasors and 1.0e-12 A on the branch current).
+    """
+    result = _run(
+        "Behavioral AC\n"
+        "V1 in 0 dc 0 ac 1 0\n"
+        "B1 out ref V={2*V(in)}\n"
+        "R1 out 0 1k\n"
+        "R2 ref 0 1k\n"
+        ".ac lin 1 1000 1000\n"
+        ".end\n"
+    )[0]
+    assert result.nodes["out"][0] == pytest.approx(1.0 + 0.0j, rel=1e-6, abs=1e-9)
+    assert result.nodes["ref"][0] == pytest.approx(-1.0 + 0.0j, rel=1e-6, abs=1e-9)
+    assert result.currents["B1"][0] == pytest.approx(-1e-3 + 0.0j, rel=1e-6, abs=1e-12)
+
+
+@pytest.mark.parametrize("bias", [1.0, 2.5])
+def test_behavioral_nonlinear_voltage_source_ac_gain_is_twice_the_bias(bias):
+    """V={V(in)**2} linearized around V(in) = VQ gives a small-signal gain 2*VQ.
+
+    d(V(in)^2)/dV(in) = 2*V(in) = 2*VQ at the DC bias, so a 0.1 V AC phasor on
+    `in` must appear as 0.2*VQ V on `out` (the B source is stiff, R1 only
+    supplies the load current). The .op value itself is VQ^2. The bias is
+    parametrized (1 V and 2.5 V) so that a gradient taken at zero instead of at
+    the operating point would fail the second case (gain 5 instead of 2).
+
+    Tolerance: the gradient is a central difference with step
+    1e-6*max(1,|V|); for a quadratic the truncation error is exactly zero
+    (third derivative is 0), leaving float roundoff, so rel=1e-6 / abs=1e-9
+    (measured 2.0e-13 V on the phasor and 0.0 V on the DC point).
+    """
+    results = _run(
+        "Behavioral nonlinear\n"
+        f"V1 in 0 dc {bias} ac 0.1 0\n"
+        "B1 out 0 V={V(in)**2}\n"
+        "R1 out 0 1k\n"
+        ".op\n"
+        ".ac lin 1 1000 1000\n"
+        ".end\n"
+    )
+    op, ac = results[0], results[1]
+    assert op.nodes["out"] == pytest.approx(bias ** 2, rel=1e-6, abs=1e-9)
+    assert ac.nodes["out"][0] == pytest.approx(2.0 * bias * 0.1 + 0.0j, rel=1e-6, abs=1e-9)
+
+
+def test_behavioral_current_source_floating_output_dc_and_ac():
+    """B2 pushes V(in)**2/1k from p to n, both off ground (no return to 0).
+
+    DC: V(in) = 1 V -> 1 mA from p to n. KCL at p: V(p)/1k + 1 mA = 0 ->
+    V(p) = -1 V; at n: V(n)/1k - 1 mA = 0 -> V(n) = +1 V. Both rows need the
+    b[j]/A[j,:] stamps, which is what this circuit adds.
+    AC: the small-signal transconductance is d/dV(in) = 2*V(in)/1k = 2 mS, so a
+    1 V phasor on `in` drives 2 mA from p to n and the 1 kohm loads see
+    V(p) = -2 V, V(n) = +2 V.
+    Tolerance: gmin (1e-12 S) sits in parallel with the 1 kohm loads, so it
+    leaks gmin*V = 2e-12 A -> 2e-9 V across them; measured deviations are
+    1.0e-9 V on DC and 2.0e-9 V on AC, so abs=1e-6 (DC) and rel=1e-6 (AC, a
+    2e-6 V window) keep 1000x margin and only a wrong stamp can break them.
+    """
+    results = _run(
+        "Behavioral floating I\n"
+        "V1 in 0 dc 1 ac 1 0\n"
+        "B2 p n I={V(in)**2/1k}\n"
+        "R1 p 0 1k\n"
+        "R2 n 0 1k\n"
+        ".op\n"
+        ".ac lin 1 1000 1000\n"
+        ".end\n"
+    )
+    op, ac = results[0], results[1]
+    assert op.nodes["p"] == pytest.approx(-1.0, abs=1e-6)
+    assert op.nodes["n"] == pytest.approx(1.0, abs=1e-6)
+    assert ac.nodes["p"][0] == pytest.approx(-2.0 + 0.0j, rel=1e-6, abs=1e-9)
+    assert ac.nodes["n"][0] == pytest.approx(2.0 + 0.0j, rel=1e-6, abs=1e-9)

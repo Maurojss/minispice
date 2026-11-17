@@ -37,3 +37,9 @@ def test_subcircuit_operating_point(run):
         ".op\n.end\n"
     )[0]
     assert result.nodes["2"] == pytest.approx(5.0, abs=1e-6)
+
+
+def test_zero_resistance_is_rejected(run):
+    """A 0-ohm resistor has no finite DC stamp (1/R would blow up)."""
+    with pytest.raises(ValueError, match="zero resistance"):
+        run("V1 1 0 10\nR1 1 2 0\nR2 2 0 1k\n.op\n.end\n")

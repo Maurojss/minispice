@@ -1,4 +1,9 @@
 import csv
+import runpy
+import subprocess
+import sys
+
+import pytest
 
 from minispice.cli import main
 
@@ -116,3 +121,50 @@ def test_cli_sensitivity_flag(tmp_path, capsys):
     assert "R1" in output and "R2" in output
     assert "worst case:" in output
     assert "0.45" in output and "0.55" in output
+
+
+def test_python_module_entry_point_help_and_netlist(tmp_path, monkeypatch, capsys):
+    """``__main__.py`` run as a script: --help and a real netlist both exit 0.
+
+    runpy executes ``src/minispice/__main__.py`` with ``__name__ == "__main__"``
+    in this process, so the module-level import, the guard and
+    ``raise SystemExit(main())`` are all exercised (a subprocess would leave
+    them invisible to coverage). sys.argv is patched exactly as the CLI sees it.
+    """
+    netlist = tmp_path / "divider.cir"
+    netlist.write_text("Divider\nV1 1 0 10\nR1 1 2 1k\nR2 2 0 1k\n.op\n.end\n")
+
+    monkeypatch.setattr(sys, "argv", ["minispice", "--help"])
+    with pytest.raises(SystemExit) as helper:
+        runpy.run_module("minispice", run_name="__main__")
+    assert helper.value.code == 0
+    out = capsys.readouterr().out
+    assert "usage: minispice" in out
+    assert ".cir netlist" in out
+
+    monkeypatch.setattr(sys, "argv", ["minispice", str(netlist)])
+    with pytest.raises(SystemExit) as run:
+        runpy.run_module("minispice", run_name="__main__")
+    assert run.value.code == 0
+    # Closed form: 10 V split by two equal resistors -> V(2) = 5 V.
+    assert "V(2) = 5 V" in capsys.readouterr().out
+
+
+def test_python_dash_m_subprocess_help(tmp_path):
+    """`python -m minispice --help` works through the interpreter's -m machinery.
+
+    The subprocess runs the same interpreter as the suite from a temporary cwd,
+    proving the installed package (and not the repository layout) provides the
+    entry point. --help exits through argparse's SystemExit(0), so both the
+    return code and the usage banner are checked.
+    """
+    done = subprocess.run(
+        [sys.executable, "-m", "minispice", "--help"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=120,
+    )
+    assert done.returncode == 0
+    assert "usage: minispice" in done.stdout
+    assert ".cir netlist" in done.stdout
