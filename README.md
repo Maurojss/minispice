@@ -471,7 +471,7 @@ A full worked example of **transistor capacitance** — using the same PDK files
 `cg·`/`cj·` parameters and the book's methodology — lives in
 [docs/capacitance.md](docs/capacitance.md): gate cap `CGG = Cox·W·L + 2·CGDO·W`
 (1.74 fF/µm for the NFET), graded junction caps at `VDD/2`, effective resistance
-`Req`, and the delay model `t = 0.69·Req·CL`, verified in transient within 5%:
+`Req`, and the delay model `t = 0.69·Req·CL`, verified in transient within 5%. Cell characterization (FA): [docs/fa_characterization.md](docs/fa_characterization.md) (delays vs CL, Cin, leakage/corners, reproducible via `scripts/fa_characterize.py`).
 
 ```bash
 python pdk/sky130/capacitance.py              # cap table + 0.69*Req*CL
