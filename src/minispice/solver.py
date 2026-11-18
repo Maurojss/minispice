@@ -1810,7 +1810,7 @@ class Simulation:
         if spec.to_x is not None:
             mask &= x <= spec.to_x
         x, y = x[mask], y[mask]
-        if len(x) < 2:
+        if len(x) < 2 and spec.kind not in {"max", "min"}:
             raise ValueError("measurement needs at least two points")
 
         if spec.kind in {"rise", "fall"}:

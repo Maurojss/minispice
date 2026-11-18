@@ -6,7 +6,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-262%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-280%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-numpy%20%2B%20matplotlib-orange)
 
 </div>
@@ -101,7 +101,7 @@ SPICE semantics and is validated against analytic results.
   sky130-inspired subcircuits, with the
   real sky130 PDK BSIM4 files vendored for reference (see
   [below](#compound-gates-with-the-sky130-pdk)).
-- **Tests:** 278 passing — engine, parser, DC, transient, AC, devices, CLI, GUI and
+- **Tests:** 280 passing — engine, parser, DC, transient, AC, devices, CLI, GUI and
   schematic rendering, leakage, parameters/measurements, dependent and
   behavioral sources (DC and AC
   stamps), noise, distortion, stepping, Monte Carlo, BJT and the compound cells (including 82
